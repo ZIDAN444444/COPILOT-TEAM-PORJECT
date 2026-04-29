@@ -1,0 +1,98 @@
+CREATE TABLE IF NOT EXISTS creators (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            creator_id TEXT,
+            name TEXT,
+            gmv REAL DEFAULT 0,
+            category TEXT,
+            category_id TEXT,
+            followers INTEGER DEFAULT 0,
+            engagement_rate REAL DEFAULT 0,
+            contact_info TEXT,
+            avatar_url TEXT,
+            region TEXT,
+            status TEXT DEFAULT 'Not Contacted',
+            last_contacted DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            creator_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            status TEXT DEFAULT 'pending', -- pending, sent, failed
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (creator_id) REFERENCES creators(id)
+        );
+CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1), -- Only allow one row for global settings
+            app_key TEXT,
+            app_secret TEXT,
+            shop_id TEXT,
+            shop_cipher TEXT,
+            access_token TEXT,
+            refresh_token TEXT,
+            access_token_expire_in INTEGER,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+CREATE TABLE IF NOT EXISTS categories (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            parent_id TEXT,
+            has_children INTEGER DEFAULT 0
+        );
+-- Insert a default row if it doesn't exist
+        INSERT OR IGNORE INTO settings (id) VALUES (1);
+Database initialized successfully.
+SELECT * FROM settings WHERE id = 1
+{
+  "code": 0,
+  "data": {
+    "creators": [
+      {
+        "avatar": {
+          "url": "https://p19-common-sign.tiktokcdn.com/tos-alisg-avt-0068/f8dbf9ad3f0b92ed968f71b2bf79c921~tplv-tiktokx-cropcenter:720:720.webp?dr=14579&refresh_token=995f66b4&x-expires=1777615200&x-signature=aIXDRJUnX7EPQMEe2%2BF5hprI2HI%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=39dffb78&idc=my2"
+        },
+        "avg_ec_live_uv": 0,
+        "avg_ec_video_view_count": 153,
+        "category_ids": [
+          "604579",
+          "601739",
+          "604968"
+        ],
+        "creator_open_id": "NbI9XQAAAAAgaVjXm5gKBy5uIuFtKMwGGJIKR824AmOWNycGdySEwg",
+        "follower_count": 2875,
+        "gmv": {
+          "amount": "2.609015",
+          "currency": "USD"
+        },
+        "gmv_range": {
+          "currency": "USD",
+          "formatted_range": "Rp0-Rp50RB",
+          "maximum_amount": "100",
+          "minimum_amount": "0"
+        },
+        "nickname": "OkediilService",
+        "selection_region": "ID",
+        "top_follower_demographics": {
+          "age_ranges": [
+            "AGE_RANGE_18_24",
+            "AGE_RANGE_25_34"
+          ],
+          "major_gender": {
+            "gender": "MALE",
+            "percentage": 5674
+          }
+        },
+        "username": "okediilservice",
+        "video_gmv": {
+          "amount": "2.609015",
+          "currency": "USD"
+        }
+      }
+    ],
+    "next_page_token": "",
+    "search_key": "Tk6puUOaUgOTZVQILmo60bGOZhEnOOaw3JpQUa9AzqQ="
+  },
+  "message": "Success",
+  "request_id": "2026042914163966284467D114D6049685"
+}
