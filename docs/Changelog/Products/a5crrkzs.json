@@ -1,0 +1,17 @@
+{
+  "note": "Konten tidak tersedia via API publik. Metadata dari tree.",
+  "url": "https://partner.tiktokshop.com/docv2/page/a5crrkzs",
+  "meta": {
+    "document_id": "689ba401dc20310498f3140d",
+    "parent_id": "654b22360fe8ca02c079012f",
+    "name": "GS POP product listing workflow revamp",
+    "document_path": "a5crrkzs",
+    "is_api_doc": false,
+    "doc_type": 3,
+    "update_time": "1755032482",
+    "keywords": [
+      "Breaking Change",
+      "Action Required"
+    ]
+  }
+}

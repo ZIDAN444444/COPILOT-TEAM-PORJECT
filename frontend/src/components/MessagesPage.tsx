@@ -35,9 +35,7 @@ export default function MessagesPage() {
   const [attachmentData, setAttachmentData] = useState({ type: null, id: '' });
   const [localImageCache, setLocalImageCache] = useState({});
   
-  // New Conversation Modal
-  const [showNewChat, setShowNewChat] = useState(false);
-  const [newChatCreatorId, setNewChatCreatorId] = useState('');
+
 
   const fetchConversations = async (loadMore = false) => {
     try {
@@ -226,33 +224,6 @@ export default function MessagesPage() {
     }
   };
 
-  const handleCreateChat = async (e) => {
-    e.preventDefault();
-    if (!newChatCreatorId.trim() || sending) return;
-    
-    setSending(true);
-    try {
-      const res = await axios.post(`${API_URL}/conversations`, {
-        creator_open_id: newChatCreatorId
-      });
-      if (res.data.success) {
-        setShowNewChat(false);
-        setNewChatCreatorId('');
-        // Re-fetch conversations and set the new one
-        await fetchConversations();
-        const convId = res.data.data.conversation?.conversation_id;
-        // In actual implementation, we might want to lookup this ID in the fetched list
-        // For now, selecting it visually might require the full object, so we'll just refetch and user clicks it.
-        alert('Conversation created or opened. Please check the top of your list.');
-      } else {
-        alert(res.data.error);
-      }
-    } catch (err) {
-      alert('Failed to create chat: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setSending(false);
-    }
-  };
 
   const filteredConversations = conversations.filter(conv => {
     if (!searchTerm) return true;
@@ -264,9 +235,6 @@ export default function MessagesPage() {
     <div className="main-content" style={{ paddingBottom: '2rem', overflow: 'hidden' }}>
       <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Messages</h1>
-        <button className="btn btn-primary" onClick={() => setShowNewChat(true)}>
-          <Plus size={18} style={{ marginRight: '0.5rem' }} /> New Chat
-        </button>
       </div>
 
       <div className="glass-card" style={{ display: 'flex', padding: 0, overflow: 'hidden', flex: 1, minHeight: 0 }}>
@@ -569,34 +537,6 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* New Chat Modal */}
-      {showNewChat && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: '400px', padding: '2rem' }}>
-            <h2 style={{ marginBottom: '1.5rem' }}>New Conversation</h2>
-            <form onSubmit={handleCreateChat}>
-              <div className="form-group">
-                <label>Creator Open ID</label>
-                <input 
-                  type="text" 
-                  required 
-                  value={newChatCreatorId}
-                  onChange={e => setNewChatCreatorId(e.target.value)}
-                  placeholder="e.g. uACafQAAAAB..."
-                  style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'white', borderRadius: '0.5rem', marginTop: '0.5rem' }}
-                />
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Enter the unique Creator Open ID to start a conversation.</p>
-              </div>
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowNewChat(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={sending}>
-                  {sending ? 'Starting...' : 'Start Chat'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       <style>{`
         .spinner { animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }

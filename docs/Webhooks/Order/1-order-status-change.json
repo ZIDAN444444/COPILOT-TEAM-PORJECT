@@ -1,0 +1,16 @@
+{
+  "note": "Konten tidak tersedia via API publik. Metadata dari tree.",
+  "url": "https://partner.tiktokshop.com/docv2/page/1-order-status-change",
+  "meta": {
+    "document_id": "650300b8a57708028b430b4a",
+    "parent_id": "670cb97e54f920030fb8e2fc",
+    "name": "(1) Order status change",
+    "document_path": "1-order-status-change",
+    "is_api_doc": false,
+    "doc_type": 2,
+    "update_time": "1751450092",
+    "keywords": [
+      "Order Status Update"
+    ]
+  }
+}
