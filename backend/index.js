@@ -467,18 +467,41 @@ app.post('/api/messages', async (req, res) => {
 
 // Conversation Management Endpoints
 app.get('/api/conversations', async (req, res) => {
-    const { page_token, page_size } = req.query;
+    const { page_token, page_size, conversation_status } = req.query;
     try {
         let apiPath = '/affiliate_seller/202412/conversations';
         const params = [];
         params.push(`page_size=${page_size || 20}`);
         params.push(`only_need_conversation_id=false`);
         if (page_token) params.push(`page_token=${page_token}`);
+        if (conversation_status && conversation_status !== 'ALL') params.push(`conversation_status=${conversation_status}`);
         if (params.length > 0) apiPath += `?${params.join('&')}`;
 
         const response = await makeTikTokApiCall(apiPath, 'GET');
         if (response.code === 0) {
             res.json({ success: true, data: response.data || { conversations: [] } });
+        } else {
+            res.status(400).json({ success: false, error: response.message });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/conversations', async (req, res) => {
+    const { creator_open_id } = req.body;
+    if (!creator_open_id) {
+        return res.status(400).json({ success: false, error: 'creator_open_id is required' });
+    }
+
+    try {
+        const response = await makeTikTokApiCall('/affiliate_seller/202508/conversations', 'POST', {
+            "creator_open_id": creator_open_id,
+            "only_need_conversation_id": false
+        });
+
+        if (response.code === 0) {
+            res.json({ success: true, data: response.data });
         } else {
             res.status(400).json({ success: false, error: response.message });
         }
@@ -568,7 +591,10 @@ app.post('/api/conversations/images/upload', upload.single('image'), async (req,
         const FormData = require('form-data');
         const fs = require('fs');
         const form = new FormData();
-        form.append('data', fs.createReadStream(req.file.path));
+        form.append('data', fs.createReadStream(req.file.path), {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype
+        });
 
         const response = await axios.post(url, form, {
             headers: {
@@ -593,30 +619,64 @@ app.post('/api/conversations/images/upload', upload.single('image'), async (req,
 
 app.post('/api/conversations/:id/messages', async (req, res) => {
     const { id } = req.params;
-    const { text, imageUrl } = req.body;
+    const { text, imageUrl, imageData, productId, collabId, applyId } = req.body;
     try {
-        let textResponse = { code: 0 };
+        let responses = [];
         if (text) {
             const textContent = JSON.stringify({ "content": text });
-            textResponse = await makeTikTokApiCall(`/affiliate_seller/202412/conversations/${id}/messages`, 'POST', {
+            responses.push(await makeTikTokApiCall(`/affiliate_seller/202412/conversations/${id}/messages`, 'POST', {
                 "msg_type": "TEXT",
                 "content": textContent
-            });
+            }));
         }
 
-        let imageResponse = { code: 0 };
-        if (imageUrl) {
-            const imageContent = JSON.stringify({ "url": imageUrl });
-            imageResponse = await makeTikTokApiCall(`/affiliate_seller/202412/conversations/${id}/messages`, 'POST', {
+        if (imageData && imageData.url) {
+            const imageContent = JSON.stringify({ 
+                "url": imageData.url,
+                "width": parseInt(imageData.width) || 1080,
+                "height": parseInt(imageData.height) || 1080
+            });
+            responses.push(await makeTikTokApiCall(`/affiliate_seller/202412/conversations/${id}/messages`, 'POST', {
                 "msg_type": "IMAGE",
                 "content": imageContent
-            });
+            }));
+        } else if (imageUrl) {
+            const imageContent = JSON.stringify({ "url": imageUrl, "width": 1080, "height": 1080 });
+            responses.push(await makeTikTokApiCall(`/affiliate_seller/202412/conversations/${id}/messages`, 'POST', {
+                "msg_type": "IMAGE",
+                "content": imageContent
+            }));
         }
 
-        if (textResponse.code === 0 && imageResponse.code === 0) {
+        if (productId) {
+            const productContent = JSON.stringify({ "product_id": productId });
+            responses.push(await makeTikTokApiCall(`/affiliate_seller/202412/conversations/${id}/messages`, 'POST', {
+                "msg_type": "PRODUCT_CARD",
+                "content": productContent
+            }));
+        }
+
+        if (collabId) {
+            const collabContent = JSON.stringify({ "target_collaboration_id": collabId });
+            responses.push(await makeTikTokApiCall(`/affiliate_seller/202412/conversations/${id}/messages`, 'POST', {
+                "msg_type": "TARGET_COLLABORATION_CARD",
+                "content": collabContent
+            }));
+        }
+
+        if (applyId) {
+            const applyContent = JSON.stringify({ "apply_id": applyId });
+            responses.push(await makeTikTokApiCall(`/affiliate_seller/202412/conversations/${id}/messages`, 'POST', {
+                "msg_type": "FREE_SAMPLE_CARD",
+                "content": applyContent
+            }));
+        }
+
+        const failed = responses.find(r => r.code !== 0);
+        if (!failed) {
             res.json({ success: true });
         } else {
-            res.status(400).json({ success: false, error: textResponse.message || imageResponse.message });
+            res.status(400).json({ success: false, error: failed.message });
         }
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
