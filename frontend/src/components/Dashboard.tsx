@@ -12,11 +12,11 @@ export default function Dashboard() {
   const [category, setCategory] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [importing, setImporting] = useState(false);
-  
+
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
-  
+
   // New creator form
   const [newCreator, setNewCreator] = useState({ username: '', name: '', category: '', gmv: '', followers: '' });
   const [messageTemplate, setMessageTemplate] = useState('Hi {name}, would love to collaborate on TikTok Shop!');
@@ -123,10 +123,10 @@ export default function Dashboard() {
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     const formData = new FormData();
     formData.append('file', file);
-    
+
     setImporting(true);
     try {
       const res = await axios.post(`${API_URL}/creators/import`, formData);
@@ -175,7 +175,7 @@ export default function Dashboard() {
             <div className="value">{creators.length}</div>
           </div>
         </div>
-        <div className="glass-card stat-card">
+        {/* <div className="glass-card stat-card">
           <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
             <DollarSign size={24} />
           </div>
@@ -183,7 +183,7 @@ export default function Dashboard() {
             <h3>Total GMV</h3>
             <div className="value">${totalGMV.toLocaleString()}</div>
           </div>
-        </div>
+        </div> */}
         <div className="glass-card stat-card">
           <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' }}>
             <Activity size={24} />
@@ -201,14 +201,14 @@ export default function Dashboard() {
         <div className="toolbar">
           <div className="search-bar">
             <Search size={18} />
-            <input 
-              type="text" 
-              placeholder="Search by username or name..." 
+            <input
+              type="text"
+              placeholder="Search by username or name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <select 
+          <select
             className="select-filter"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -230,8 +230,8 @@ export default function Dashboard() {
             <thead>
               <tr>
                 <th className="checkbox-cell">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     onChange={handleSelectAll}
                     checked={selected.size === creators.length && creators.length > 0}
                   />
@@ -249,8 +249,8 @@ export default function Dashboard() {
               {creators?.map(creator => (
                 <tr key={creator.id}>
                   <td>
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={selected.has(creator.id)}
                       onChange={() => handleSelect(creator.id)}
                     />
@@ -280,11 +280,10 @@ export default function Dashboard() {
                   </td>
                   <td>{creator.engagement_rate || 0}%</td>
                   <td>
-                    <span className={`badge ${
-                      creator.status === 'Contacted' ? 'badge-green' : 
-                      creator.status === 'Interested' ? 'badge-blue' :
-                      creator.status === 'Collaborating' ? 'badge-orange' : 'badge-gray'
-                    }`}>
+                    <span className={`badge ${creator.status === 'Contacted' ? 'badge-green' :
+                        creator.status === 'Interested' ? 'badge-blue' :
+                          creator.status === 'Collaborating' ? 'badge-orange' : 'badge-gray'
+                      }`}>
                       {creator.status || 'Not Contacted'}
                     </span>
                   </td>
@@ -315,30 +314,30 @@ export default function Dashboard() {
             <form onSubmit={handleAddCreator}>
               <div className="form-group">
                 <label>TikTok Username *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   placeholder="e.g. charlidamelio"
                   value={newCreator.username}
-                  onChange={e => setNewCreator({...newCreator, username: e.target.value})}
+                  onChange={e => setNewCreator({ ...newCreator, username: e.target.value })}
                 />
               </div>
               <div className="form-group">
                 <label>Full Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Charli D'Amelio"
                   value={newCreator.name}
-                  onChange={e => setNewCreator({...newCreator, name: e.target.value})}
+                  onChange={e => setNewCreator({ ...newCreator, name: e.target.value })}
                 />
               </div>
               <div className="form-group">
                 <label>Category</label>
-                <select 
-                  className="select-filter" 
+                <select
+                  className="select-filter"
                   style={{ width: '100%' }}
                   value={newCreator.category}
-                  onChange={e => setNewCreator({...newCreator, category: e.target.value})}
+                  onChange={e => setNewCreator({ ...newCreator, category: e.target.value })}
                 >
                   <option value="">Select Category...</option>
                   {categories.map(cat => (
@@ -371,7 +370,7 @@ export default function Dashboard() {
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
                   Use {'{name}'} or {'{username}'} for personalization.
                 </p>
-                <textarea 
+                <textarea
                   rows={4}
                   required
                   value={messageTemplate}
@@ -384,10 +383,10 @@ export default function Dashboard() {
                   <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
                     <Upload size={18} />
                     {uploadingImage ? 'Uploading...' : 'Choose Image'}
-                    <input 
-                      type="file" 
-                      hidden 
-                      accept="image/*" 
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/*"
                       onChange={async (e) => {
                         const file = e.target.files[0];
                         if (!file) return;
@@ -402,14 +401,14 @@ export default function Dashboard() {
                         } finally {
                           setUploadingImage(false);
                         }
-                      }} 
+                      }}
                     />
                   </label>
                   {messageImage && (
                     <div style={{ position: 'relative' }}>
                       <img src={messageImage.url || messageImage} alt="Preview" style={{ height: '40px', borderRadius: '4px' }} />
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => setMessageImage(null)}
                         style={{ position: 'absolute', top: -8, right: -8, background: 'var(--danger)', color: 'white', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       >
