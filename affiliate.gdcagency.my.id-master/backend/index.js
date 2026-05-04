@@ -83,12 +83,12 @@ const makeTikTokApiCall = async (fullPath, method = 'POST', payload = {}) => {
     }
 
     // Check if token is expired (with 5 min buffer)
-    const updatedAt = settings.updated_at ? new Date(settings.updated_at).getTime() / 1000 : 0;
+    // access_token_expire_in is stored as an absolute Unix timestamp
     const now = Math.floor(Date.now() / 1000);
-    const expiresIn = settings.access_token_expire_in || 0;
+    const expiresAt = settings.access_token_expire_in || 0;
 
-    if (now > (updatedAt + expiresIn - 300)) {
-        console.log('Access token expired. Refreshing...');
+    if (expiresAt > 0 && now > (expiresAt - 300)) {
+        console.log('Access token expired or expiring soon. Refreshing...');
         try {
             const newAccessToken = await refreshTikTokToken();
             settings.access_token = newAccessToken;
@@ -943,7 +943,7 @@ app.post('/api/marketplace/search', async (req, res) => {
         if (Object.keys(affiliateData).length > 0) filterBody.affiliate_data = affiliateData;
 
         // Build URL with pagination
-        let apiPath = '/affiliate_seller/202508/marketplace_creators/search?page_size=100';
+        let apiPath = '/affiliate_seller/202508/marketplace_creators/search?page_size=20';
         if (page_token) apiPath += `&page_token=${encodeURIComponent(page_token)}`;
 
         console.log("SENDING TO TIKTOK API:", JSON.stringify(filterBody, null, 2));
@@ -966,8 +966,7 @@ app.post('/api/marketplace/search', async (req, res) => {
                     }
                 }
                 if (names.length > 0) {
-                    // Jika ada kategori yang dicari, paksakan nama tersebut ada di depan
-                    // karena TikTok kadang hanya mengembalikan child_id di category_ids
+                    // 
                     if (requestedCategoryName) {
                         const idx = names.indexOf(requestedCategoryName);
                         if (idx > -1) {
@@ -1012,8 +1011,8 @@ app.post('/api/marketplace/search', async (req, res) => {
         });
 
     } catch (err) {
-        console.error('Marketplace search error:', err.message);
-        res.status(500).json({ success: false, error: err.message });
+        console.error('Marketplace search error:', err.response?.data || err.message);
+        res.status(500).json({ success: false, error: err.response?.data?.message || err.message });
     }
 });
 
