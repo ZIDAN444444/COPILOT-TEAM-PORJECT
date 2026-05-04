@@ -15,7 +15,7 @@
       "interface_path": "/affiliate_seller/202508/marketplace_creators/search",
       "title": "Seller Search Creator on Marketplace",
       "env_desc": "This API is used by Sellers to search for Creators in the Creator Marketplace. Sellers can search based on filters such as GMV, keywords, and Creator follower demographics. All the data returned is for the last 30 days.",
-      "method": 1,
+      "method": 1, 
       "query": "https://open-api.tiktokglobalshop.com/affiliate_seller/202508/marketplace_creators/search?app_key=123abc&sign=5361235029d141222525e303d742f9e38aea052d10896d3197ab9d6233730b8c&timestamp=1625484268&shop_cipher=ROW_RHkDDABBAAB8tKAVoAqsMTjsQZFLyNfY&page_token=b2Zmc2V0PTAK&page_size=12",
       "request_header_param": [
         {
@@ -125,7 +125,7 @@
           "desc": "A particular gender, \"MALE\" or \"FEMALE\""
         },
         {
-          "name": "^^percentage_ge",
+          "name": "^^percentage_ge", 
           "type": "int",
           "required": "N",
           "desc": "Greater than or equal to a certain percentage, scaled up by 10,000 times. \nFor example, 6000 stands for 0.6 or 60%"

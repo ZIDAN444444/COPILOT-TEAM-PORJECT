@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, MessageSquare, Download, Upload, Plus, Users, DollarSign, Activity, X } from 'lucide-react';
+import { Search, MessageSquare, Upload, Plus, Users, Activity, X } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:3000/api';
@@ -140,7 +140,7 @@ export default function Dashboard() {
     }
   };
 
-  const totalGMV = creators.reduce((acc, curr) => acc + (curr.gmv || 0), 0);
+  // const totalGMV = creators.reduce((acc, curr) => acc + (curr.gmv || 0), 0);
 
   return (
     <div className="main-content">

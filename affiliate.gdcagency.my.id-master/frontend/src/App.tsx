@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Users, MessageSquare, Settings, LayoutDashboard } from 'lucide-react';
+import { Users, MessageSquare, Settings, LayoutDashboard, Globe } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import SettingsPage from './components/SettingsPage';
 import MessagesPage from './components/MessagesPage';
+import MarketplacePage from './components/MarketplacePage';
 
 function Sidebar() {
   const location = useLocation();
@@ -35,6 +36,10 @@ function Sidebar() {
         <Link to="/creators" className={`nav-item ${location.pathname === '/creators' || location.pathname === '/' ? 'active' : ''}`}>
           <Users size={20} />
           <span>Creators</span>
+        </Link>
+        <Link to="/marketplace" className={`nav-item ${location.pathname === '/marketplace' ? 'active' : ''}`}>
+          <Globe size={20} />
+          <span>Marketplace</span>
         </Link>
         <Link to="/messages" className={`nav-item ${location.pathname === '/messages' ? 'active' : ''}`}>
           <MessageSquare size={20} />
@@ -70,6 +75,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/creators" element={<Dashboard />} />
+          <Route path="/marketplace" element={<MarketplacePage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

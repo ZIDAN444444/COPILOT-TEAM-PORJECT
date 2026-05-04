@@ -274,6 +274,51 @@ app.post('/api/creators', (req, res) => {
     }
 });
 
+// Batch add creators
+app.post('/api/creators/batch', (req, res) => {
+    const { creators } = req.body;
+    if (!creators || !Array.isArray(creators)) {
+        return res.status(400).json({ success: false, error: 'Invalid payload' });
+    }
+
+    try {
+        const stmt = db.prepare(`
+            INSERT OR REPLACE INTO creators (
+                username, creator_id, name, category, gmv, gmv_range, 
+                followers, avatar_url, region
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, 
+                ?, ?, ?
+            )
+        `);
+
+        const insertMany = db.transaction((creators) => {
+            let count = 0;
+            for (const c of creators) {
+                if (!c.username) continue;
+                stmt.run(
+                    c.username,
+                    c.creator_id || null,
+                    c.name || c.username,
+                    c.category || '',
+                    c.gmv || 0,
+                    c.gmv_range || null,
+                    c.followers || 0,
+                    c.avatar_url || null,
+                    c.region || null
+                );
+                count++;
+            }
+            return count;
+        });
+
+        const insertedCount = insertMany(creators);
+        res.json({ success: true, count: insertedCount });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Import via Excel
 app.post('/api/creators/import', upload.single('file'), (req, res) => {
     if (!req.file) {
@@ -810,6 +855,165 @@ app.get('/api/auth/callback', async (req, res) => {
     } catch (err) {
         console.error('Error fetching TikTok token:', err.response?.data || err.message);
         res.status(500).send('Internal Server Error during token exchange.');
+    }
+});
+
+// ─── Creator Marketplace Search ───────────────────────────────────────────────
+// POST /api/marketplace/search
+// Cari creator dari TikTok Marketplace dengan filter lengkap
+app.post('/api/marketplace/search', async (req, res) => {
+    try {
+        const {
+            keyword,
+            gmv_ranges,
+            category,
+            follower_min,
+            follower_max,
+            age_ranges,
+            is_fast_growing,
+            not_invited_l90_days,
+            page_token,
+            search_key
+        } = req.body;
+
+        // Build filter body sesuai TikTok API spec
+        const filterBody = {};
+
+        // Cari tahu nama kategori yang di-request user (untuk sorting nanti)
+        let requestedCategoryName = null;
+        if (category && category.length > 0) {
+            const reqCatId = category[0].parent_category_id;
+            if (reqCatId) {
+                const reqCatRow = db.prepare('SELECT name FROM categories WHERE id = ?').get(reqCatId);
+                if (reqCatRow) requestedCategoryName = reqCatRow.name;
+            }
+        }
+
+        if (keyword) filterBody.keyword = keyword;
+        if (search_key) filterBody.search_key = search_key;
+        if (gmv_ranges && gmv_ranges.length > 0) filterBody.gmv_ranges = gmv_ranges;
+
+        // Category filter — TikTok WAJIB ada child_category_id_list jika pakai kategori
+        if (category && category.length > 0) {
+            const categoryFilters = [];
+            for (const cat of category) {
+                const parentId = cat.parent_category_id;
+                // Kalau sudah ada child list dari frontend, pakai langsung
+                if (cat.child_category_id_list && cat.child_category_id_list.length > 0) {
+                    categoryFilters.push({
+                        parent_category_id: parentId,
+                        child_category_id_list: cat.child_category_id_list
+                    });
+                } else {
+                    // Cari child categories dari database lokal
+                    const children = db.prepare(
+                        'SELECT id FROM categories WHERE parent_id = ?'
+                    ).all(parentId);
+
+                    if (children.length > 0) {
+                        // Kirim parent + semua child-nya
+                        categoryFilters.push({
+                            parent_category_id: parentId,
+                            child_category_id_list: children.map(c => c.id)
+                        });
+                    }
+                    // Kalau tidak ada child, skip — jangan kirim kategori ini
+                    // karena TikTok tidak mau child_category_id_list kosong
+                }
+            }
+            if (categoryFilters.length > 0) {
+                filterBody.category = categoryFilters;
+            }
+        }
+
+        // Follower demographics
+        const followerDemographics = {};
+        if (age_ranges && age_ranges.length > 0) followerDemographics.age_ranges = age_ranges;
+        if (follower_min !== undefined || follower_max !== undefined) {
+            followerDemographics.count_range = {};
+            if (follower_min !== undefined) followerDemographics.count_range.count_ge = parseInt(follower_min);
+            if (follower_max !== undefined && follower_max > 0) followerDemographics.count_range.count_le = parseInt(follower_max);
+        }
+        if (Object.keys(followerDemographics).length > 0) filterBody.follower_demographics = followerDemographics;
+
+        // Affiliate data filters
+        const affiliateData = {};
+        if (is_fast_growing) affiliateData.is_fast_growing = true;
+        if (not_invited_l90_days) affiliateData.not_invited_l90_days = true;
+        if (Object.keys(affiliateData).length > 0) filterBody.affiliate_data = affiliateData;
+
+        // Build URL with pagination
+        let apiPath = '/affiliate_seller/202508/marketplace_creators/search?page_size=20';
+        if (page_token) apiPath += `&page_token=${encodeURIComponent(page_token)}`;
+
+        console.log("SENDING TO TIKTOK API:", JSON.stringify(filterBody, null, 2));
+
+        const tiktokResponse = await makeTikTokApiCall(apiPath, 'POST', filterBody);
+
+        if (tiktokResponse.code !== 0) {
+            return res.status(400).json({ success: false, error: tiktokResponse.message || 'TikTok API error' });
+        }
+
+        // Enrich creator data with category names from local DB
+        const creators = (tiktokResponse.data?.creators || []).map(creator => {
+            let categoryName = null;
+            if (creator.category_ids && creator.category_ids.length > 0) {
+                const names = [];
+                for (const catId of creator.category_ids) {
+                    const catRow = db.prepare('SELECT name FROM categories WHERE id = ?').get(catId);
+                    if (catRow) {
+                        names.push(catRow.name);
+                    }
+                }
+                if (names.length > 0) {
+                    // Jika ada kategori yang dicari, paksakan nama tersebut ada di depan
+                    // karena TikTok kadang hanya mengembalikan child_id di category_ids
+                    if (requestedCategoryName) {
+                        const idx = names.indexOf(requestedCategoryName);
+                        if (idx > -1) {
+                            names.splice(idx, 1);
+                        }
+                        names.unshift(requestedCategoryName);
+                    }
+                    // Hilangkan duplikat dan tampilkan maksimal 2 kategori
+                    const uniqueNames = [...new Set(names)];
+                    categoryName = uniqueNames.slice(0, 2).join(', ') + (uniqueNames.length > 2 ? ', ...' : '');
+                }
+            }
+            return {
+                creator_open_id: creator.creator_open_id,
+                username: creator.username,
+                nickname: creator.nickname,
+                avatar_url: creator.avatar?.url || null,
+                follower_count: creator.follower_count || 0,
+                gmv_amount: creator.gmv?.amount || null,
+                gmv_currency: creator.gmv?.currency || null,
+                gmv_range: creator.gmv_range?.formatted_range || null,
+                region: creator.selection_region || null,
+                category_ids: creator.category_ids || [],
+                category_name: categoryName,
+                avg_video_views: creator.avg_ec_video_view_count || 0,
+                avg_live_uv: creator.avg_ec_live_uv || 0,
+                ec_video_count: creator.ec_video_count || 0,
+                ec_live_count: creator.ec_live_count || 0,
+                pps: creator.pps || null,
+                rating: creator.rating || null,
+            };
+        });
+
+        res.json({
+            success: true,
+            data: {
+                creators,
+                next_page_token: tiktokResponse.data?.next_page_token || null,
+                search_key: tiktokResponse.data?.search_key || null,
+                total: creators.length
+            }
+        });
+
+    } catch (err) {
+        console.error('Marketplace search error:', err.message);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

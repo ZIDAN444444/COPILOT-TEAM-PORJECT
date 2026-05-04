@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Send, Image as ImageIcon, MoreVertical, CheckCheck, MessageSquare, Plus, Paperclip, Package, FileText, Gift, Loader2 } from 'lucide-react';
+import { Search, Send, Image as ImageIcon, MoreVertical, CheckCheck, MessageSquare, Paperclip, Package, FileText, Gift, Loader2 } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:3000/api';
@@ -198,7 +198,7 @@ export default function MessagesPage() {
 
     setSending(true);
     
-    const payload = {};
+    const payload: Record<string, any> = {};
     if (!isTextEmpty) payload.text = newMessage;
     if (imageData) payload.imageData = imageData;
     

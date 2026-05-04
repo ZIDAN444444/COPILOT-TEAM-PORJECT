@@ -56,8 +56,37 @@ const initDB = () => {
         -- Insert a default row if it doesn't exist
         INSERT OR IGNORE INTO settings (id) VALUES (1);
     `);
-    console.log('Database initialized successfully.');
 
+    // Migrasi: Tambah kolom baru ke tabel creators jika belum ada
+    const tableInfo = db.prepare('PRAGMA table_info(creators)').all();
+    const existingColumns = tableInfo.map(col => col.name);
+
+    const columnsToAdd = [
+        { name: 'gmv_range', type: 'TEXT' },
+        { name: 'ec_video_count', type: 'INTEGER DEFAULT 0' },
+        { name: 'avg_video_views', type: 'INTEGER DEFAULT 0' },
+        { name: 'avg_live_uv', type: 'INTEGER DEFAULT 0' },
+        { name: 'pps', type: 'REAL' },
+        { name: 'rating', type: 'REAL' }
+    ];
+
+    let columnsAdded = 0;
+    for (const col of columnsToAdd) {
+        if (!existingColumns.includes(col.name)) {
+            try {
+                db.exec(`ALTER TABLE creators ADD COLUMN ${col.name} ${col.type}`);
+                columnsAdded++;
+            } catch (err) {
+                console.error(`Gagal menambahkan kolom ${col.name}:`, err.message);
+            }
+        }
+    }
+
+    if (columnsAdded > 0) {
+        console.log(`Berhasil menambahkan ${columnsAdded} kolom baru ke tabel creators.`);
+    }
+
+    console.log('Database initialized successfully.');
     // Migration: Add columns if they don't exist
     try {
         db.exec("ALTER TABLE settings ADD COLUMN shop_id TEXT;");
