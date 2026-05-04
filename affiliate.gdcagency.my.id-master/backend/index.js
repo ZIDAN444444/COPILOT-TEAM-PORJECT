@@ -943,7 +943,7 @@ app.post('/api/marketplace/search', async (req, res) => {
         if (Object.keys(affiliateData).length > 0) filterBody.affiliate_data = affiliateData;
 
         // Build URL with pagination
-        let apiPath = '/affiliate_seller/202508/marketplace_creators/search?page_size=20';
+        let apiPath = '/affiliate_seller/202508/marketplace_creators/search?page_size=100';
         if (page_token) apiPath += `&page_token=${encodeURIComponent(page_token)}`;
 
         console.log("SENDING TO TIKTOK API:", JSON.stringify(filterBody, null, 2));
