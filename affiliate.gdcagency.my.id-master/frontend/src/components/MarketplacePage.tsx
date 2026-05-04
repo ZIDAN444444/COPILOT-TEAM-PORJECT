@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Search, Globe, Plus, Check, Filter, ChevronDown, RefreshCw, AlertCircle } from 'lucide-react';
+import { Search, Globe, Plus, Check, Filter, ChevronDown, RefreshCw, AlertCircle, TrendingUp, Users, Zap, Rocket, Mail, FolderOpen, DollarSign } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:3000/api';
 
 const GMV_RANGES = [
-  { label: '$0 – $100', value: 'GMV_RANGE_0_100' },
-  { label: '$100 – $1,000', value: 'GMV_RANGE_100_1000' },
-  { label: '$1,000 – $10,000', value: 'GMV_RANGE_1000_10000' },
-  { label: '$10,000+', value: 'GMV_RANGE_10000_AND_ABOVE' },
+  { label: 'Rp 0 – Rp 1,5jt', value: 'GMV_RANGE_0_100' },
+  { label: 'Rp 1,5jt – Rp 15jt', value: 'GMV_RANGE_100_1000' },
+  { label: 'Rp 15jt – Rp 150jt', value: 'GMV_RANGE_1000_10000' },
+  { label: 'Rp 150jt+', value: 'GMV_RANGE_10000_AND_ABOVE' },
 ];
 
 const FOLLOWER_PRESETS = [
@@ -164,69 +164,71 @@ export default function MarketplacePage() {
   return (
     <div className="main-content">
       {/* Header */}
-      <div className="header">
+      <div className="header" style={{ marginBottom: '-0.5rem' }}>
         <div>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Globe size={28} style={{ color: 'var(--accent)' }} />
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.5rem' }}>
+            <Globe size={22} style={{ color: 'var(--accent)' }} />
             Creator Discovery
           </h1>
-          <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-            Temukan creator TikTok dari seluruh Marketplace • Data 30 hari terakhir
+          <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem', fontSize: '0.8rem' }}>
+            Temukan creator TikTok dari Marketplace • Data 30 hari terakhir
           </p>
         </div>
         <button
           className="btn btn-secondary"
           onClick={() => setShowFilters(f => !f)}
-          style={{ gap: '0.5rem' }}
+          style={{ gap: '0.5rem', padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
         >
-          <Filter size={16} />
-          {showFilters ? 'Sembunyikan Filter' : 'Tampilkan Filter'}
+          <Filter size={14} />
+          {showFilters ? 'Sembunyikan' : 'Filter'}
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
         {/* Filter Panel */}
         {showFilters && (
           <div style={{
-            width: 240, flexShrink: 0,
+            width: 230, flexShrink: 0,
             background: 'var(--panel-bg)',
             border: '1px solid var(--border-color)',
             borderRadius: 12,
-            padding: '1.25rem',
-            display: 'flex', flexDirection: 'column', gap: '1.5rem',
+            padding: '1rem',
+            display: 'flex', flexDirection: 'column', gap: '1rem',
             position: 'sticky', top: 0,
-          }}>
+            minWidth: 200,
+          }} className="filter-panel">
             {/* Keyword */}
             <div>
-              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
-                🔍 Kata Kunci
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.35rem' }}>
+                <Search size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} /> Kata Kunci
               </label>
-              <div className="search-bar" style={{ height: 38 }}>
-                <Search size={14} />
+              <div className="search-bar" style={{ height: 34 }}>
+                <Search size={13} />
                 <input
                   type="text"
                   placeholder="Username atau nama..."
                   value={keyword}
                   onChange={e => setKeyword(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  style={{ fontSize: '0.85rem' }}
                 />
               </div>
             </div>
 
             {/* GMV Filter */}
             <div>
-              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
-                💰 GMV (30 Hari)
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>
+                <DollarSign size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} /> GMV (30 Hari)
               </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                 {GMV_RANGES.map(r => (
-                  <label key={r.value} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.875rem', padding: '0.25rem 0' }}>
+                  <label key={r.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', padding: '0.2rem 0' }}>
                     <input
                       type="checkbox"
                       checked={selectedGmv.includes(r.value)}
                       onChange={() => toggleGmv(r.value)}
-                      style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
+                      style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
                     />
                     {r.label}
                   </label>
@@ -236,12 +238,12 @@ export default function MarketplacePage() {
 
             {/* Category Filter */}
             <div>
-              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
-                📂 Kategori
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>
+                <FolderOpen size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} /> Kategori
               </label>
               <select
                 className="select-filter"
-                style={{ width: '100%', height: 38 }}
+                style={{ width: '100%', height: 34, fontSize: '0.85rem' }}
                 value={selectedCategoryId}
                 onChange={e => setSelectedCategoryId(e.target.value)}
               >
@@ -254,18 +256,18 @@ export default function MarketplacePage() {
 
             {/* Followers */}
             <div>
-              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
-                👥 Followers
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>
+                <Users size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} /> Followers
               </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                 {FOLLOWER_PRESETS.map((p, i) => (
-                  <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.875rem', padding: '0.25rem 0' }}>
+                  <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', padding: '0.2rem 0' }}>
                     <input
                       type="radio"
                       name="follower"
                       checked={followerPreset === i}
                       onChange={() => setFollowerPreset(i)}
-                      style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
+                      style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
                     />
                     {p.label}
                   </label>
@@ -275,27 +277,27 @@ export default function MarketplacePage() {
 
             {/* Advanced Filters */}
             <div>
-              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
-                ⚡ Lainnya
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>
+                <Zap size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} /> Lainnya
               </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.875rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
                   <input
                     type="checkbox"
                     checked={isFastGrowing}
                     onChange={e => setIsFastGrowing(e.target.checked)}
-                    style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
+                    style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
                   />
-                  🚀 Fast Growing
+                  <Rocket size={13} style={{ display: 'inline', verticalAlign: 'middle' }} /> Fast Growing
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.875rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
                   <input
                     type="checkbox"
                     checked={notInvited}
                     onChange={e => setNotInvited(e.target.checked)}
-                    style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
+                    style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
                   />
-                  📩 Belum Diundang 90h
+                  <Mail size={13} style={{ display: 'inline', verticalAlign: 'middle' }} /> Belum Diundang 90h
                 </label>
               </div>
             </div>
@@ -303,11 +305,11 @@ export default function MarketplacePage() {
             {/* Search Button */}
             <button
               className="btn btn-primary"
-              style={{ width: '100%', padding: '0.75rem', fontSize: '0.9rem', borderRadius: 8 }}
+              style={{ width: '100%', padding: '0.6rem', fontSize: '0.875rem', borderRadius: 8 }}
               onClick={() => handleSearch(false)}
               disabled={loading}
             >
-              {loading ? <RefreshCw size={16} className="spin" /> : <Search size={16} />}
+              {loading ? <RefreshCw size={15} className="spin" /> : <Search size={15} />}
               {loading ? 'Mencari...' : 'Cari Creator'}
             </button>
           </div>
