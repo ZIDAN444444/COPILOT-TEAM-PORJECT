@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, MessageSquare, Upload, Plus, Users, Activity, X } from 'lucide-react';
+import { Search, MessageSquare, Upload, Users, Activity, X } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:3000/api';
@@ -10,15 +10,13 @@ export default function Dashboard() {
   const [selected, setSelected] = useState(new Set());
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
-  const [syncing, setSyncing] = useState(false);
+
   const [importing, setImporting] = useState(false);
 
   // Modals state
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
 
-  // New creator form
-  const [newCreator, setNewCreator] = useState({ username: '', name: '', category: '', gmv: '', followers: '' });
+
   const [messageTemplate, setMessageTemplate] = useState('Hi {name}, would love to collaborate on TikTok Shop!');
   const [messageImage, setMessageImage] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -71,18 +69,7 @@ export default function Dashboard() {
     setSelected(newSelected);
   };
 
-  const handleAddCreator = async (e) => {
-    e.preventDefault();
-    try {
-      await axios.post(`${API_URL}/creators`, newCreator);
-      setShowAddModal(false);
-      setNewCreator({ username: '', name: '', category: '', gmv: '', followers: '' });
-      fetchCreators();
-    } catch (err) {
-      console.error(err);
-      alert('Error adding creator');
-    }
-  };
+
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -103,22 +90,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleSync = async () => {
-    if (selected.size === 0) return alert('Select creators first');
-    setSyncing(true);
-    try {
-      await axios.post(`${API_URL}/creators/sync`, {
-        ids: Array.from(selected)
-      });
-      fetchCreators();
-      alert('Sync complete!');
-    } catch (err) {
-      console.error(err);
-      alert('Sync failed: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setSyncing(false);
-    }
-  };
+
 
   const handleImport = async (e) => {
     const file = e.target.files[0];
@@ -154,14 +126,7 @@ export default function Dashboard() {
             <MessageSquare size={18} />
             Message ({selected.size})
           </button>
-          <button className="btn btn-secondary" onClick={handleSync} disabled={selected.size === 0 || syncing}>
-            <Activity size={18} className={syncing ? 'spin' : ''} />
-            {syncing ? 'Syncing...' : `Sync Stats (${selected.size})`}
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-            <Plus size={18} />
-            Add Creator
-          </button>
+
         </div>
       </div>
 
@@ -301,58 +266,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Add Creator Modal */}
-      {showAddModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h2 className="modal-title">Add New Creator</h2>
-              <button className="close-btn" onClick={() => setShowAddModal(false)}>
-                <X size={24} />
-              </button>
-            </div>
-            <form onSubmit={handleAddCreator}>
-              <div className="form-group">
-                <label>TikTok Username *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. charlidamelio"
-                  value={newCreator.username}
-                  onChange={e => setNewCreator({ ...newCreator, username: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label>Full Name</label>
-                <input
-                  type="text"
-                  placeholder="Charli D'Amelio"
-                  value={newCreator.name}
-                  onChange={e => setNewCreator({ ...newCreator, name: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label>Category</label>
-                <select
-                  className="select-filter"
-                  style={{ width: '100%' }}
-                  value={newCreator.category}
-                  onChange={e => setNewCreator({ ...newCreator, category: e.target.value })}
-                >
-                  <option value="">Select Category...</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.name}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Add Creator</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+
 
       {/* Send Message Modal */}
       {showMessageModal && (

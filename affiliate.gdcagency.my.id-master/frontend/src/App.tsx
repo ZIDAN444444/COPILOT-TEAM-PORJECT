@@ -46,20 +46,20 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
 
         <div className="nav-links">
           <Link
-            to="/creators"
-            className={`nav-item ${location.pathname === '/creators' || location.pathname === '/' ? 'active' : ''}`}
-            onClick={handleNavClick}
-          >
-            <Users size={20} />
-            <span>Creators</span>
-          </Link>
-          <Link
             to="/marketplace"
-            className={`nav-item ${location.pathname === '/marketplace' ? 'active' : ''}`}
+            className={`nav-item ${location.pathname === '/marketplace' || location.pathname === '/' ? 'active' : ''}`}
             onClick={handleNavClick}
           >
             <Globe size={20} />
             <span>Marketplace</span>
+          </Link>
+          <Link
+            to="/creators"
+            className={`nav-item ${location.pathname === '/creators' ? 'active' : ''}`}
+            onClick={handleNavClick}
+          >
+            <Users size={20} />
+            <span>Creators</span>
           </Link>
           <Link
             to="/messages"
@@ -115,15 +115,15 @@ function App() {
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/creators" element={<Dashboard />} />
+          <Route path="/" element={<MarketplacePage />} />
           <Route path="/marketplace" element={<MarketplacePage />} />
+          <Route path="/creators" element={<Dashboard />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </div>
     </Router>
-  );
+  );  
 }
 
 export default App;
