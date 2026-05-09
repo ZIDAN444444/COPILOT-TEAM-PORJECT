@@ -83,12 +83,12 @@ const makeTikTokApiCall = async (fullPath, method = 'POST', payload = {}) => {
     }
 
     // Check if token is expired (with 5 min buffer)
-    // access_token_expire_in is stored as an absolute Unix timestamp
+    const updatedAt = settings.updated_at ? new Date(settings.updated_at).getTime() / 1000 : 0;
     const now = Math.floor(Date.now() / 1000);
-    const expiresAt = settings.access_token_expire_in || 0;
+    const expiresIn = settings.access_token_expire_in || 0;
 
-    if (expiresAt > 0 && now > (expiresAt - 300)) {
-        console.log('Access token expired or expiring soon. Refreshing...');
+    if (now > (updatedAt + expiresIn - 300)) {
+        console.log('Access token expired. Refreshing...');
         try {
             const newAccessToken = await refreshTikTokToken();
             settings.access_token = newAccessToken;
@@ -729,10 +729,8 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
 });
 app.get('/api/settings', (req, res) => {
     try {
-        const stmt = db.prepare('SELECT app_key, app_secret, shop_id, shop_cipher, access_token, access_token_expire_in FROM settings WHERE id = 1');
+        const stmt = db.prepare('SELECT app_key, app_secret, shop_id, shop_cipher, access_token FROM settings WHERE id = 1');
         const settings = stmt.get() || {};
-        const now = Math.floor(Date.now() / 1000);
-        const isConnected = !!(settings.access_token && settings.access_token_expire_in > now);
         res.json({
             success: true,
             data: {
@@ -740,7 +738,7 @@ app.get('/api/settings', (req, res) => {
                 app_secret: settings.app_secret || '',
                 shop_id: settings.shop_id || '',
                 shop_cipher: settings.shop_cipher || '',
-                is_connected: isConnected
+                is_connected: !!settings.access_token
             }
         });
     } catch (err) {
@@ -860,13 +858,10 @@ app.get('/api/auth/callback', async (req, res) => {
     }
 });
 
-// ─── Creator Marketplace Search (Streaming) ───────────────────────────────────
-app.post('/api/marketplace/search/stream', async (req, res) => {
-    // Setup Header untuk Streaming (NDJSON)
-    res.setHeader('Content-Type', 'application/x-ndjson');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    
+// ─── Creator Marketplace Search ───────────────────────────────────────────────
+// POST /api/marketplace/search
+// Cari creator dari TikTok Marketplace dengan filter lengkap
+app.post('/api/marketplace/search', async (req, res) => {
     try {
         const {
             keyword,
@@ -878,12 +873,10 @@ app.post('/api/marketplace/search/stream', async (req, res) => {
             is_fast_growing,
             not_invited_l90_days,
             page_token,
-            search_key,
-            target_count
+            search_key
         } = req.body;
 
         // Build filter body sesuai TikTok API spec
-        // Note: advanced_filters.language tidak didukung untuk region ID (Indonesia)
         const filterBody = {};
 
         // Cari tahu nama kategori yang di-request user (untuk sorting nanti)
@@ -949,263 +942,78 @@ app.post('/api/marketplace/search/stream', async (req, res) => {
         if (not_invited_l90_days) affiliateData.not_invited_l90_days = true;
         if (Object.keys(affiliateData).length > 0) filterBody.affiliate_data = affiliateData;
 
-        const targetCount = target_count || 20;
-        let accumulatedCreators = [];
-        let seenCreatorIds = new Set();
-        let currentToken = page_token || '';
-        let lastSearchKey = search_key || '';
-        let hasMore = true;
-        let consecutiveEmptyPages = 0;
+        // Build URL with pagination
+        let apiPath = '/affiliate_seller/202508/marketplace_creators/search?page_size=20';
+        if (page_token) apiPath += `&page_token=${encodeURIComponent(page_token)}`;
 
-        console.log(`Starting deep search for target_count: ${targetCount}`);
+        console.log("SENDING TO TIKTOK API:", JSON.stringify(filterBody, null, 2));
 
-        // Tidak ada batas waktu - biarkan berjalan sampai target terpenuhi
-        const startTime = Date.now();
-        const MAX_EXECUTION_TIME_MS = 60 * 60 * 1000; // 60 menit (praktis tidak ada batas)
+        const tiktokResponse = await makeTikTokApiCall(apiPath, 'POST', filterBody);
 
-        // AUTO-EXPAND LOGIC: Perluas pencarian dengan banyak variasi keyword untuk bypass limit TikTok ~100 hasil
-        // Kombinasi: kosong, a-z, 0-9, aa-az, ba-bz, ... untuk total ratusan variasi
-        const singleChars = ['', 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','0','1','2','3','4','5','6','7','8','9'];
-        const doubleChars = [];
-        for (const a of 'abcdefghijklmnopqrstuvwxyz'.split('')) {
-            for (const b of 'abcdefghijklmnopqrstuvwxyz'.split('')) {
-                doubleChars.push(a + b);
-            }
-        }
-        const alphabet = [...singleChars, ...doubleChars]; // ~710 variasi
-        let autoSearchIndex = 0;
-        const originalKeyword = keyword || '';
-
-        // Jika target_count cukup besar, kita perbolehkan auto-expand
-        const allowAutoExpand = targetCount > 20;
-        let rateLimited = false;
-
-        while (accumulatedCreators.length < targetCount && autoSearchIndex < alphabet.length && !rateLimited) {
-            
-
-            if (autoSearchIndex > 0) {
-                if (!allowAutoExpand) break; // Jangan auto-expand jika cuma minta 20 (Load More standard)
-                
-                const appendStr = alphabet[autoSearchIndex];
-                filterBody.keyword = originalKeyword ? `${originalKeyword} ${appendStr}` : appendStr;
-                console.log(`[Auto-Expand] TikTok limit reached. Retrying search with keyword: "${filterBody.keyword}"`);
-                
-                // Reset pagination state for the new keyword
-                currentToken = '';
-                lastSearchKey = '';
-                hasMore = true;
-                consecutiveEmptyPages = 0;
-                
-                // Tambahkan delay lebih besar agar aman dari rate limit
-                await new Promise(r => setTimeout(r, 2000));
-            }
-
-            // Inner loop: Tarik data sampai target terpenuhi atau halaman habis
-            while (accumulatedCreators.length < targetCount && hasMore) {
-                
-
-                // TikTok API membatasi page_size HANYA boleh 12 atau 20.
-                let apiPath = '/affiliate_seller/202508/marketplace_creators/search?page_size=20';
-                
-                if (currentToken) {
-                    apiPath += `&page_token=${encodeURIComponent(currentToken)}`;
-                }
-
-                if (lastSearchKey) filterBody.search_key = lastSearchKey;
-
-                console.log(`Fetching page. Current unique count: ${accumulatedCreators.length}/${targetCount} (Keyword: "${filterBody.keyword || ''}")`);
-
-                let tiktokResponse;
-                let retryCount = 0;
-                let fetchSuccess = false;
-
-                while (retryCount < 3 && !fetchSuccess) {
-
-                    try {
-                        tiktokResponse = await makeTikTokApiCall(apiPath, 'POST', filterBody);
-                        fetchSuccess = true;
-                    } catch (err) {
-                        retryCount++;
-                        const errorMsg = err.response?.data?.message || err.message || '';
-                        console.log(`API Call Exception (Percobaan ${retryCount}/3):`, errorMsg);
-                        
-                        if (retryCount >= 3) {
-                            rateLimited = true;
-                            if (accumulatedCreators.length === 0) {
-                                res.write(JSON.stringify({ type: 'error', error: 'Koneksi ke TikTok terputus setelah 3x percobaan (' + errorMsg + '). Silakan coba lagi.' }) + '\n');
-                                res.end();
-                                return;
-                            }
-                            console.log('Berhenti aman karena error jaringan berturut-turut, mengembalikan data yang terkumpul.');
-                            break;
-                        }
-                        
-                        // Jeda waktu (Backoff) sebelum mencoba ulang agar server TikTok tenang
-                        console.log('Istirahat 3 detik sebelum menerobos ulang...');
-                        await new Promise(r => setTimeout(r, 3000));
-                    }
-                }
-
-                if (!fetchSuccess) break; // Keluar dari inner loop jika gagal 3x atau timeout
-
-                if (tiktokResponse.code !== 0) {
-                    if (tiktokResponse.message && tiktokResponse.message.toLowerCase().includes('too many requests')) {
-                        console.log('Rate Limit Hit! Stopping all fetching.');
-                        rateLimited = true;
-                        if (accumulatedCreators.length === 0) {
-                            return res.status(400).json({ success: false, error: 'Server TikTok mendeteksi aktivitas yang terlalu cepat (Rate Limit). Mohon berhenti sejenak dan coba lagi dalam 5-10 menit.' });
-                        }
-                        break;
-                    }
-
-                    if (accumulatedCreators.length === 0 && autoSearchIndex === 0) {
-                        return res.status(400).json({ success: false, error: tiktokResponse.message || 'TikTok API error' });
-                    }
-                    console.log(`TikTok API error after some success: ${tiktokResponse.message}. Stopping this branch.`);
-                    hasMore = false;
-                    break;
-                }
-
-                const rawCreators = tiktokResponse.data?.creators || [];
-                let newCreators = [...rawCreators];
-
-                newCreators = newCreators.filter(c => {
-                    const fCount = c.follower_count || 0;
-                    if (follower_min !== undefined && fCount < parseInt(follower_min)) return false;
-                    if (follower_max !== undefined && follower_max > 0 && fCount > parseInt(follower_max)) return false;
-                    return true;
-                });
-
-                if (gmv_ranges && gmv_ranges.length > 0) {
-                    const GMV_RANGE_MAP = {
-                        'GMV_RANGE_0_100':            { min: 0,     max: 100 },
-                        'GMV_RANGE_100_1000':          { min: 100,   max: 1000 },
-                        'GMV_RANGE_1000_10000':        { min: 1000,  max: 10000 },
-                        'GMV_RANGE_10000_AND_ABOVE':   { min: 10000, max: Infinity },
-                    };
-
-                    newCreators = newCreators.filter(c => {
-                        let gmvUSD = null;
-                        if (c.gmv && c.gmv.amount != null) {
-                            const amount = parseFloat(c.gmv.amount);
-                            if (c.gmv.currency === 'USD') gmvUSD = amount;
-                            else if (c.gmv.currency === 'IDR') gmvUSD = amount / 15500;
-                            else gmvUSD = amount; 
-                        }
-                        if (gmvUSD === null) {
-                            return gmv_ranges.includes('GMV_RANGE_0_100');
-                        }
-                        return gmv_ranges.some(rangeKey => {
-                            const range = GMV_RANGE_MAP[rangeKey];
-                            if (!range) return false;
-                            return gmvUSD >= range.min && gmvUSD <= range.max;
-                        });
-                    });
-                }
-
-                let uniqueNewAdded = 0;
-                let newlyFoundCreators = [];
-                for (const c of newCreators) {
-                    const uid = c.creator_open_id || c.username;
-                    if (!seenCreatorIds.has(uid)) {
-                        seenCreatorIds.add(uid);
-                        accumulatedCreators.push(c);
-                        newlyFoundCreators.push(c);
-                        uniqueNewAdded++;
-                    }
-                }
-
-                // Kirim progress update ke frontend secara realtime
-                res.write(JSON.stringify({ type: 'progress', message: `Sedang mengumpulkan... (${accumulatedCreators.length} / ${targetCount})` }) + '\n');
-
-                if (newlyFoundCreators.length > 0) {
-                    // Enrich and format newly found creators immediately
-                    const chunkToSend = newlyFoundCreators.map(creator => {
-                        let categoryName = null;
-                        if (creator.category_ids && creator.category_ids.length > 0) {
-                            const names = [];
-                            for (const catId of creator.category_ids) {
-                                const catRow = db.prepare('SELECT name FROM categories WHERE id = ?').get(catId);
-                                if (catRow) names.push(catRow.name);
-                            }
-                            if (names.length > 0) {
-                                if (requestedCategoryName) {
-                                    const idx = names.indexOf(requestedCategoryName);
-                                    if (idx > -1) names.splice(idx, 1);
-                                    names.unshift(requestedCategoryName);
-                                }
-                                const uniqueNames = [...new Set(names)];
-                                categoryName = uniqueNames.slice(0, 2).join(', ') + (uniqueNames.length > 2 ? ', ...' : '');
-                            }
-                        }
-                        return {
-                            creator_open_id: creator.creator_open_id,
-                            username: creator.username,
-                            nickname: creator.nickname,
-                            avatar_url: creator.avatar?.url || null,
-                            follower_count: creator.follower_count || 0,
-                            gmv_amount: creator.gmv?.amount || null,
-                            gmv_currency: creator.gmv?.currency || null,
-                            gmv_range: creator.gmv_range?.formatted_range || null,
-                            region: creator.selection_region || null,
-                            category_ids: creator.category_ids || [],
-                            category_name: categoryName,
-                            avg_video_views: creator.avg_ec_video_view_count || 0,
-                            avg_live_uv: creator.avg_ec_live_uv || 0,
-                            ec_video_count: creator.ec_video_count || 0,
-                            ec_live_count: creator.ec_live_count || 0,
-                            pps: creator.pps || null,
-                            rating: creator.rating || null,
-                        };
-                    });
-                    
-                    // Push to frontend!
-                    res.write(JSON.stringify({ type: 'creators', creators: chunkToSend }) + '\n');
-                }
-
-                currentToken = tiktokResponse.data?.next_page_token || null;
-                lastSearchKey = tiktokResponse.data?.search_key || '';
-
-                if (!currentToken || rawCreators.length === 0) {
-                    hasMore = false;
-                }
-
-                if (uniqueNewAdded === 0) {
-                    consecutiveEmptyPages++;
-                    if (consecutiveEmptyPages >= 5) {
-                        console.log('Hit duplicate/empty limit for this keyword (5 pages). Forcing branch switch.');
-                        hasMore = false;
-                    }
-                } else {
-                    consecutiveEmptyPages = 0;
-                }
-
-                if (accumulatedCreators.length < targetCount && hasMore && !rateLimited) {
-                    // Delay diperbesar jadi 2 detik untuk menghindari rate limit agresif TikTok
-                    await new Promise(r => setTimeout(r, 2000));
-                }
-            } // End of inner loop
-            
-            autoSearchIndex++;
-        } // End of outer auto-expand loop
-
-        if (accumulatedCreators.length > targetCount) {
-            accumulatedCreators = accumulatedCreators.slice(0, targetCount);
+        if (tiktokResponse.code !== 0) {
+            return res.status(400).json({ success: false, error: tiktokResponse.message || 'TikTok API error' });
         }
 
-        // Kirim tanda selesai ke frontend
-        res.write(JSON.stringify({
-            type: 'done',
-            next_page_token: currentToken,
-            search_key: lastSearchKey,
-            total: accumulatedCreators.length
-        }) + '\n');
-        res.end();
+        // Enrich creator data with category names from local DB
+        const creators = (tiktokResponse.data?.creators || []).map(creator => {
+            let categoryName = null;
+            if (creator.category_ids && creator.category_ids.length > 0) {
+                const names = [];
+                for (const catId of creator.category_ids) {
+                    const catRow = db.prepare('SELECT name FROM categories WHERE id = ?').get(catId);
+                    if (catRow) {
+                        names.push(catRow.name);
+                    }
+                }
+                if (names.length > 0) {
+                    // Jika ada kategori yang dicari, paksakan nama tersebut ada di depan
+                    // karena TikTok kadang hanya mengembalikan child_id di category_ids
+                    if (requestedCategoryName) {
+                        const idx = names.indexOf(requestedCategoryName);
+                        if (idx > -1) {
+                            names.splice(idx, 1);
+                        }
+                        names.unshift(requestedCategoryName);
+                    }
+                    // Hilangkan duplikat dan tampilkan maksimal 2 kategori
+                    const uniqueNames = [...new Set(names)];
+                    categoryName = uniqueNames.slice(0, 2).join(', ') + (uniqueNames.length > 2 ? ', ...' : '');
+                }
+            }
+            return {
+                creator_open_id: creator.creator_open_id,
+                username: creator.username,
+                nickname: creator.nickname,
+                avatar_url: creator.avatar?.url || null,
+                follower_count: creator.follower_count || 0,
+                gmv_amount: creator.gmv?.amount || null,
+                gmv_currency: creator.gmv?.currency || null,
+                gmv_range: creator.gmv_range?.formatted_range || null,
+                region: creator.selection_region || null,
+                category_ids: creator.category_ids || [],
+                category_name: categoryName,
+                avg_video_views: creator.avg_ec_video_view_count || 0,
+                avg_live_uv: creator.avg_ec_live_uv || 0,
+                ec_video_count: creator.ec_video_count || 0,
+                ec_live_count: creator.ec_live_count || 0,
+                pps: creator.pps || null,
+                rating: creator.rating || null,
+            };
+        });
+
+        res.json({
+            success: true,
+            data: {
+                creators,
+                next_page_token: tiktokResponse.data?.next_page_token || null,
+                search_key: tiktokResponse.data?.search_key || null,
+                total: creators.length
+            }
+        });
 
     } catch (err) {
-        console.error('Marketplace search error:', err.response?.data || err.message);
-        res.write(JSON.stringify({ type: 'error', error: err.response?.data?.message || err.message }) + '\n');
-        res.end();
+        console.error('Marketplace search error:', err.message);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

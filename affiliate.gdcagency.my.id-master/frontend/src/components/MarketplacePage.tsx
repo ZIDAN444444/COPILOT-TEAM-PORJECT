@@ -1,14 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
-import { Search, Globe, Plus, Check, Filter, RefreshCw, AlertCircle, TrendingUp, Users, Zap, Rocket, Mail, FolderOpen, DollarSign } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Globe, Plus, Check, Filter, ChevronDown, RefreshCw, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:3000/api';
 
 const GMV_RANGES = [
-  { label: 'Rp 0 – Rp 1,5jt', value: 'GMV_RANGE_0_100' },
-  { label: 'Rp 1,5jt – Rp 15jt', value: 'GMV_RANGE_100_1000' },
-  { label: 'Rp 15jt – Rp 150jt', value: 'GMV_RANGE_1000_10000' },
-  { label: 'Rp 150jt+', value: 'GMV_RANGE_10000_AND_ABOVE' },
+  { label: '$0 – $100', value: 'GMV_RANGE_0_100' },
+  { label: '$100 – $1,000', value: 'GMV_RANGE_100_1000' },
+  { label: '$1,000 – $10,000', value: 'GMV_RANGE_1000_10000' },
+  { label: '$10,000+', value: 'GMV_RANGE_10000_AND_ABOVE' },
 ];
 
 const FOLLOWER_PRESETS = [
@@ -45,41 +45,6 @@ export default function MarketplacePage() {
   const [isFastGrowing, setIsFastGrowing] = useState(false);
   const [notInvited, setNotInvited] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
-  const [targetCount, setTargetCount] = useState<number>(20);
-  const [searchProgress, setSearchProgress] = useState('');
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const wakeLockRef = useRef<any>(null);
-
-  // Ambil Wake Lock agar layar tidak mati saat pencarian
-  const acquireWakeLock = async () => {
-    if ('wakeLock' in navigator) {
-      try {
-        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        console.log('Wake Lock aktif: Layar tidak akan mati selama pencarian.');
-      } catch (e) {
-        console.warn('Wake Lock tidak bisa diaktifkan:', e);
-      }
-    }
-  };
-
-  const releaseWakeLock = () => {
-    if (wakeLockRef.current) {
-      wakeLockRef.current.release();
-      wakeLockRef.current = null;
-      console.log('Wake Lock dilepas.');
-    }
-  };
-
-  // Fungsi untuk membatalkan pencarian yang sedang berjalan
-  const handleCancelSearch = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    releaseWakeLock();
-    setLoading(false);
-    setError('');
-  };
 
   useEffect(() => {
     axios.get(`${API_URL}/categories`).then(res => {
@@ -92,17 +57,8 @@ export default function MarketplacePage() {
   }, []);
 
   const handleSearch = async (isLoadMore = false) => {
-    // Batalkan request sebelumnya jika ada
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
     setLoading(true);
     setError('');
-    setSearchProgress('Memulai koneksi real-time ke server TikTok...');
-    acquireWakeLock(); // Cegah layar mati selama pencarian
     if (!isLoadMore) {
       setCreators([]);
       setNextPageToken(null);
@@ -118,7 +74,6 @@ export default function MarketplacePage() {
         not_invited_l90_days: notInvited,
         search_key: isLoadMore ? searchKey : '',
         page_token: isLoadMore ? nextPageToken : undefined,
-        target_count: isLoadMore ? 20 : targetCount,
       };
 
       if (preset.min > 0) payload.follower_min = preset.min;
@@ -128,70 +83,19 @@ export default function MarketplacePage() {
         payload.category = [{ parent_category_id: selectedCategoryId }];
       }
 
-      const response = await fetch(`${API_URL}/marketplace/search/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        let errData;
-        try { errData = await response.json(); } catch(e) { errData = { error: 'Terjadi kesalahan jaringan' }; }
-        throw new Error(errData.error || `HTTP Error ${response.status}`);
-      }
-
-      if (!response.body) throw new Error('Browser tidak mendukung real-time streaming');
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete chunk in buffer
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const data = JSON.parse(line);
-            
-            if (data.type === 'progress') {
-              setSearchProgress(data.message);
-            } else if (data.type === 'creators') {
-              setCreators(prev => {
-                const combined = [...prev, ...data.creators];
-                const seen = new Set();
-                return combined.filter(c => {
-                  const uid = c.creator_open_id || c.username;
-                  if (seen.has(uid)) return false;
-                  seen.add(uid);
-                  return true;
-                });
-              });
-            } else if (data.type === 'done') {
-              setNextPageToken(data.next_page_token || null);
-              setSearchKey(data.search_key || '');
-            } else if (data.type === 'error') {
-              setError(data.error);
-            }
-          } catch (e) {
-            console.error('Error parsing streaming line:', e);
-          }
-        }
+      const res = await axios.post(`${API_URL}/marketplace/search`, payload);
+      if (res.data.success) {
+        const newCreators = res.data.data.creators || [];
+        setCreators(prev => isLoadMore ? [...prev, ...newCreators] : newCreators);
+        setNextPageToken(res.data.data.next_page_token || null);
+        setSearchKey(res.data.data.search_key || '');
+      } else {
+        setError(res.data.error || 'Gagal mencari creator');
       }
     } catch (err: any) {
-      if (err.name === 'AbortError') return;
-      setError(err.message || 'Terjadi kesalahan');
+      setError(err.response?.data?.error || err.message || 'Terjadi kesalahan');
     } finally {
-      abortControllerRef.current = null;
       setLoading(false);
-      setSearchProgress('');
-      releaseWakeLock(); // Lepas wake lock setelah selesai
     }
   };
 
@@ -232,15 +136,13 @@ export default function MarketplacePage() {
   };
 
   const toggleSelectAll = () => {
-    const selectableIds = new Set(
-      creators
-        .map(c => c.creator_open_id || c.username)
-        .filter(uid => !addedIds.has(uid))
-    );
-    if (selectedIds.size === selectableIds.size && selectableIds.size > 0) {
+    if (selectedIds.size === creators.filter(c => !addedIds.has(c.creator_open_id || c.username)).length) {
       setSelectedIds(new Set()); // Deselect all
     } else {
-      setSelectedIds(new Set(selectableIds));
+      const allSelectable = creators
+        .map(c => c.creator_open_id || c.username)
+        .filter(uid => !addedIds.has(uid));
+      setSelectedIds(new Set(allSelectable));
     }
   };
 
@@ -260,81 +162,71 @@ export default function MarketplacePage() {
   };
 
   return (
-    <div className="main-content" style={{ overflow: 'hidden', paddingBottom: 0, display: 'flex', flexDirection: 'column' }}>
+    <div className="main-content">
       {/* Header */}
-      <div className="header" style={{ marginBottom: '-0.5rem' }}>
+      <div className="header">
         <div>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.5rem' }}>
-            <Globe size={22} style={{ color: 'var(--accent)' }} />
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Globe size={28} style={{ color: 'var(--accent)' }} />
             Creator Discovery
           </h1>
-          <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem', fontSize: '0.8rem' }}>
-            Temukan creator TikTok dari Marketplace • Data 30 hari terakhir
+          <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+            Temukan creator TikTok dari seluruh Marketplace • Data 30 hari terakhir
           </p>
         </div>
         <button
           className="btn btn-secondary"
           onClick={() => setShowFilters(f => !f)}
-          style={{ gap: '0.5rem', padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
+          style={{ gap: '0.5rem' }}
         >
-          <Filter size={14} />
-          {showFilters ? 'Sembunyikan' : 'Filter'}
+          <Filter size={16} />
+          {showFilters ? 'Sembunyikan Filter' : 'Tampilkan Filter'}
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch', flex: 1, minHeight: 0, paddingBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
 
         {/* Filter Panel */}
         {showFilters && (
           <div style={{
-            width: 230, flexShrink: 0,
+            width: 240, flexShrink: 0,
             background: 'var(--panel-bg)',
             border: '1px solid var(--border-color)',
             borderRadius: 12,
-            padding: '1rem',
-            display: 'flex', flexDirection: 'column', gap: '1rem',
-            overflowY: 'auto',
-            minWidth: 200,
-          }} className="filter-panel no-scrollbar">
-            {/* Search Button (Moved to top) */}
-            <button
-              className="btn btn-primary"
-              style={{ width: '100%', padding: '0.6rem', fontSize: '0.875rem', borderRadius: 8, position: 'relative', overflow: 'hidden', flexShrink: 0, marginBottom: '0.25rem' }}
-              onClick={() => loading ? handleCancelSearch() : handleSearch(false)}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                {loading ? <RefreshCw size={15} className="spin" /> : <Search size={15} />}
-                {loading ? 'Batalkan Pencarian' : 'Cari Creator'}
-              </div>
-            </button>
-
+            padding: '1.25rem',
+            display: 'flex', flexDirection: 'column', gap: '1.5rem',
+            position: 'sticky', top: 0,
+          }}>
             {/* Keyword */}
             <div>
-
-              <div className="search-bar" style={{ height: 34 }}>
-                <Search size={13} />
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                🔍 Kata Kunci
+              </label>
+              <div className="search-bar" style={{ height: 38 }}>
+                <Search size={14} />
                 <input
                   type="text"
                   placeholder="Username atau nama..."
                   value={keyword}
                   onChange={e => setKeyword(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                  style={{ fontSize: '0.85rem' }}
                 />
               </div>
             </div>
 
             {/* GMV Filter */}
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <DollarSign size={16} style={{ color: 'var(--text-muted)', marginTop: '0.2rem', flexShrink: 0 }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', flex: 1 }}>
+            <div>
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                💰 GMV (30 Hari)
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 {GMV_RANGES.map(r => (
-                  <label key={r.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', padding: '0.2rem 0' }}>
+                  <label key={r.value} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.875rem', padding: '0.25rem 0' }}>
                     <input
                       type="checkbox"
                       checked={selectedGmv.includes(r.value)}
                       onChange={() => toggleGmv(r.value)}
-                      style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+                      style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
                     />
                     {r.label}
                   </label>
@@ -343,11 +235,13 @@ export default function MarketplacePage() {
             </div>
 
             {/* Category Filter */}
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <FolderOpen size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            <div>
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                📂 Kategori
+              </label>
               <select
                 className="select-filter"
-                style={{ width: '100%', height: 34, fontSize: '0.85rem' }}
+                style={{ width: '100%', height: 38 }}
                 value={selectedCategoryId}
                 onChange={e => setSelectedCategoryId(e.target.value)}
               >
@@ -359,17 +253,19 @@ export default function MarketplacePage() {
             </div>
 
             {/* Followers */}
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <Users size={16} style={{ color: 'var(--text-muted)', marginTop: '0.2rem', flexShrink: 0 }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', flex: 1 }}>
+            <div>
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                👥 Followers
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 {FOLLOWER_PRESETS.map((p, i) => (
-                  <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', padding: '0.2rem 0' }}>
+                  <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.875rem', padding: '0.25rem 0' }}>
                     <input
                       type="radio"
                       name="follower"
                       checked={followerPreset === i}
                       onChange={() => setFollowerPreset(i)}
-                      style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+                      style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
                     />
                     {p.label}
                   </label>
@@ -377,53 +273,48 @@ export default function MarketplacePage() {
               </div>
             </div>
 
-            {/* Target Count */}
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <TrendingUp size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-              <select
-                className="select-filter"
-                style={{ width: '100%', height: 34, fontSize: '0.85rem' }}
-                value={targetCount}
-                onChange={e => setTargetCount(Number(e.target.value))}
-              >
-                <option value={20}>20 Kreator</option>
-                <option value={100}>100 Kreator</option>
-                <option value={200}>200 Kreator</option>
-                <option value={500}>500 Kreator</option>
-                <option value={1000}>1000 Kreator</option>
-              </select>
-            </div>
-
             {/* Advanced Filters */}
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <Zap size={16} style={{ color: 'var(--text-muted)', marginTop: '0.2rem', flexShrink: 0 }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+            <div>
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                ⚡ Lainnya
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.875rem' }}>
                   <input
                     type="checkbox"
                     checked={isFastGrowing}
                     onChange={e => setIsFastGrowing(e.target.checked)}
-                    style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+                    style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
                   />
-                  <Rocket size={13} style={{ display: 'inline', verticalAlign: 'middle' }} /> Fast Growing
+                  🚀 Fast Growing
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.875rem' }}>
                   <input
                     type="checkbox"
                     checked={notInvited}
                     onChange={e => setNotInvited(e.target.checked)}
-                    style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+                    style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
                   />
-                  <Mail size={13} style={{ display: 'inline', verticalAlign: 'middle' }} /> Belum Diundang 90h
+                  📩 Belum Diundang 90h
                 </label>
               </div>
             </div>
 
+            {/* Search Button */}
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '0.75rem', fontSize: '0.9rem', borderRadius: 8 }}
+              onClick={() => handleSearch(false)}
+              disabled={loading}
+            >
+              {loading ? <RefreshCw size={16} className="spin" /> : <Search size={16} />}
+              {loading ? 'Mencari...' : 'Cari Creator'}
+            </button>
           </div>
         )}
 
         {/* Results Panel */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           {/* Error */}
           {error && (
             <div style={{
@@ -450,37 +341,6 @@ export default function MarketplacePage() {
             </div>
           )}
 
-          {/* Cool Loading Animation - Pindah ke Atas Tabel */}
-          {loading && (
-            <div style={{ 
-              padding: '1.25rem 1.5rem', 
-              display: 'flex', flexDirection: 'row', 
-              alignItems: 'center', justifyContent: 'space-between', gap: '1.5rem', flexWrap: 'wrap',
-              background: 'var(--panel-bg)', borderRadius: 12, border: '1px solid var(--border-color)',
-              marginBottom: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.05)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flex: 1, minWidth: 200 }}>
-                <div style={{ position: 'relative', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0 }}>
-                  <div style={{ position: 'absolute', width: '100%', height: '100%', border: '3px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                  <div style={{ position: 'absolute', width: '70%', height: '70%', border: '3px solid rgba(59, 130, 246, 0.5)', borderBottomColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite reverse' }} />
-                  <Globe size={18} style={{ color: 'var(--accent)', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
-                </div>
-                <div>
-                  <h3 style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: '1rem', marginBottom: '0.2rem' }}>Mencari Kreator...</h3>
-                  {searchProgress ? (
-                    <div style={{ color: 'var(--accent)', fontWeight: 600, fontSize: '0.85rem' }}>
-                      {searchProgress}
-                    </div>
-                  ) : (
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>
-                      Sistem sedang menarik data secara bertahap...
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-  
           {/* Results Count & Batch Action */}
           {creators.length > 0 && (
             <div style={{ 
@@ -503,83 +363,33 @@ export default function MarketplacePage() {
                 )}
               </div>
               
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                {/* Pilih Semua / Batal Semua */}
-                {creators.filter(c => !addedIds.has(c.creator_open_id || c.username)).length > 0 && (
-                  (() => {
-                    const selectableIds = new Set(
-                      creators
-                        .map(c => c.creator_open_id || c.username)
-                        .filter(uid => !addedIds.has(uid))
-                    );
-                    const isAllSelected = selectableIds.size > 0 && selectedIds.size === selectableIds.size;
-                    
-                    return (
-                      <>
-                        {isAllSelected ? (
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => setSelectedIds(new Set())}
-                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                          >
-                            <RefreshCw size={14} /> Batal Pilih Semua
-                          </button>
-                        ) : (
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => setSelectedIds(new Set(selectableIds))}
-                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                          >
-                            <Check size={14} /> Pilih Semua ({selectableIds.size})
-                          </button>
-                        )}
-                        {/* Tombol Batal Terpilih */}
-                        {selectedIds.size > 0 && !isAllSelected && (
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => setSelectedIds(new Set())}
-                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem', color: '#ef4444' }}
-                          >
-                            <RefreshCw size={14} /> Batal Pilihan ({selectedIds.size})
-                          </button>
-                        )}
-                      </>
-                    );
-                  })()
-                )}
-
-                {/* Simpan Terpilih */}
-                {selectedIds.size > 0 && (
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleBatchAddCreators}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                  >
-                    <Check size={16} />
-                    Simpan {selectedIds.size} Terpilih
-                  </button>
-                )}
-              </div>
+              {selectedIds.size > 0 && (
+                <button
+                  className="btn btn-primary"
+                  onClick={handleBatchAddCreators}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                >
+                  <Check size={16} />
+                  Simpan {selectedIds.size} Terpilih
+                </button>
+              )}
             </div>
           )}
 
           {/* Creator Table */}
-          <div style={{ flex: 1, overflow: 'auto', background: 'var(--panel-bg)', borderRadius: 12, border: '1px solid var(--border-color)' }}>
+          <div style={{ overflowX: 'auto', background: 'var(--panel-bg)', borderRadius: 12, border: '1px solid var(--border-color)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-              <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--panel-bg)', boxShadow: '0 1px 0 var(--border-color)' }}>
-                <tr>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
                   <th style={{ padding: '1rem', width: 40 }}>
                     <input 
                       type="checkbox" 
                       style={{ accentColor: 'var(--accent)', width: 16, height: 16, cursor: 'pointer' }}
-                      checked={(() => {
-                        const selectableIds = new Set(
-                          creators
-                            .map(c => c.creator_open_id || c.username)
-                            .filter(uid => !addedIds.has(uid))
-                        );
-                        return selectableIds.size > 0 && selectedIds.size === selectableIds.size;
-                      })()}
+                      checked={
+                        creators.length > 0 && 
+                        creators.filter(c => !addedIds.has(c.creator_open_id || c.username)).length > 0 &&
+                        selectedIds.size === creators.filter(c => !addedIds.has(c.creator_open_id || c.username)).length
+                      }
                       onChange={toggleSelectAll}
                     />
                   </th>
@@ -643,16 +453,9 @@ export default function MarketplacePage() {
                       <td style={{ padding: '1rem' }}>
                         <div style={{ fontWeight: 700, color: 'var(--success)' }}>
                           {creator.gmv_amount 
-                            ? (() => {
-                                const amount = parseFloat(creator.gmv_amount);
-                                if (creator.gmv_currency === 'USD') {
-                                   return `Rp${(amount * 15500).toLocaleString('id-ID')}`;
-                                }
-                                if (creator.gmv_currency === 'IDR') {
-                                   return `Rp${amount.toLocaleString('id-ID')}`;
-                                }
-                                return `${creator.gmv_currency || '$'}${amount.toLocaleString('en-US')}`;
-                              })()
+                            ? (creator.region === 'ID' 
+                                ? `Rp${parseFloat(creator.gmv_amount).toLocaleString('id-ID')}` 
+                                : `$${parseFloat(creator.gmv_amount).toLocaleString('en-US')}`) 
                             : (creator.gmv_range 
                                 ? (creator.region === 'ID' ? creator.gmv_range.replace(/\$/g, 'Rp') : creator.gmv_range) 
                                 : '–')}
@@ -708,11 +511,27 @@ export default function MarketplacePage() {
               </tbody>
             </table>
 
-
+            {/* Loading Skeletons */}
+            {loading && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', opacity: 0.7, animation: 'pulse 1.5s infinite' }}>
+                Memuat data...
+              </div>
+            )}
           </div>
 
-
-
+          {/* Load More */}
+          {nextPageToken && !loading && (
+            <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => handleSearch(true)}
+                style={{ padding: '0.75rem 2rem', borderRadius: 8 }}
+              >
+                <ChevronDown size={16} />
+                Muat Lebih Banyak
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
